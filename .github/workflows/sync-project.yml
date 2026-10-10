@@ -1,0 +1,672 @@
+
+name: Sync GitHub Project
+
+on:
+  issues:
+    types: [opened, closed, reopened]
+  pull_request:
+    types:
+      - opened
+      - ready_for_review
+      - converted_to_draft
+      - closed
+      - reopened
+  pull_request_review:
+    types: [submitted]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-project-${{ github.event.repository.name }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.PROJECTS_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PROJECTS_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: packed-org
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Synchronize project
+        uses: actions/github-script@v8
+        env:
+          PROJECT_OWNER: packed-org
+          PROJECT_NUMBER: "3"
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const owner = process.env.PROJECT_OWNER;
+            const projectNumber = Number(process.env.PROJECT_NUMBER);
+            const repoName = process.env.REPOSITORY_NAME;
+            const { graphql } = github;
+
+            const allowedRepos = ["packed-api", "packed-web"];
+            const statusNames = [
+              "Backlog",
+              "Todo",
+              "In Progress",
+              "In Review",
+              "Done"
+            ];
+
+            function todayInBrazil() {
+              return new Intl.DateTimeFormat("en-CA", {
+                timeZone: "America/Fortaleza",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit"
+              }).format(new Date());
+            }
+
+            function fail(message) {
+              core.setFailed(message);
+              throw new Error(message);
+            }
+
+            if (!allowedRepos.includes(repoName)) {
+              fail(`Repositório não previsto na automação: ${repoName}`);
+            }
+
+            // Carrega o projeto e os campos personalizados.
+            const projectData = await graphql(
+              `query($owner: String!, $number: Int!) {
+                organization(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    title
+                    fields(first: 100) {
+                      nodes {
+                        ... on ProjectV2Field {
+                          id
+                          name
+                        }
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options {
+                            id
+                            name
+                          }
+                        }
+                        ... on ProjectV2Field {
+                          id
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }`,
+              { owner, number: projectNumber }
+            );
+
+            const project = projectData.organization?.projectV2;
+
+            if (!project) {
+              fail(`Projeto ${owner} número ${projectNumber} não encontrado.`);
+            }
+
+            const fields = project.fields.nodes;
+            const statusField = fields.find(f => f.name === "Status");
+            const repoField = fields.find(f => f.name === "Repositório");
+            const startField = fields.find(f => f.name === "Start date");
+            const completedField = fields.find(f => ["Completion date", "Date completed"].includes(f.name));
+
+            if (!statusField?.options) {
+              fail('O campo "Status" precisa ser do tipo Single Select.');
+            }
+
+            if (!repoField?.options) {
+              fail('O campo "Repositório" precisa ser do tipo Single Select.');
+            }
+
+            for (const name of statusNames) {
+              if (!statusField.options.some(option => option.name === name)) {
+                fail(`A opção "${name}" não existe no campo Status.`);
+              }
+            }
+
+            for (const name of allowedRepos) {
+              if (!repoField.options.some(option => option.name === name)) {
+                fail(`A opção "${name}" não existe no campo Repositório.`);
+              }
+            }
+
+            if (!startField) {
+              fail('Campo de data "Start date" não encontrado.');
+            }
+
+            if (!completedField) {
+              fail('Campo de data "Completion date" (ou "Date completed") não encontrado.');
+            }
+
+            const statusOption = name =>
+              statusField.options.find(option => option.name === name)?.id;
+
+            const repoOption = repoName =>
+              repoField.options.find(option => option.name === repoName)?.id;
+
+            async function setSingleSelect(itemId, fieldId, optionId) {
+              await graphql(
+                `mutation(
+                  $projectId: ID!,
+                  $itemId: ID!,
+                  $fieldId: ID!,
+                  $optionId: String!
+                ) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }`,
+                {
+                  projectId: project.id,
+                  itemId,
+                  fieldId,
+                  optionId
+                }
+              );
+            }
+
+            async function setStatus(itemId, name) {
+              await setSingleSelect(
+                itemId,
+                statusField.id,
+                statusOption(name)
+              );
+              core.info(`Status atualizado para "${name}".`);
+
+              if (name === "Todo" || name === "In Progress") {
+                await ensureStartDate(itemId);
+              }
+            }
+
+            async function setRepository(itemId) {
+              await setSingleSelect(
+                itemId,
+                repoField.id,
+                repoOption(repoName)
+              );
+              core.info(`Campo Repositório atualizado para "${repoName}".`);
+            }
+
+            async function setDate(itemId, fieldId, date) {
+              await graphql(
+                `mutation(
+                  $projectId: ID!,
+                  $itemId: ID!,
+                  $fieldId: ID!,
+                  $date: Date!
+                ) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { date: $date }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }`,
+                {
+                  projectId: project.id,
+                  itemId,
+                  fieldId,
+                  date
+                }
+              );
+            }
+
+            async function ensureStartDate(itemId) {
+              const result = await graphql(
+                `query($itemId: ID!) {
+                  node(id: $itemId) {
+                    ... on ProjectV2Item {
+                      fieldValueByName(name: "Start date") {
+                        ... on ProjectV2ItemFieldDateValue {
+                          date
+                        }
+                      }
+                    }
+                  }
+                }`,
+                { itemId }
+              );
+
+              const currentDate = result.node?.fieldValueByName?.date;
+              if (!currentDate) {
+                await setDate(itemId, startField.id, todayInBrazil());
+                core.info('Campo "Start date" preenchido.');
+              }
+            }
+
+            async function clearDate(itemId, fieldId) {
+              await graphql(
+                `mutation(
+                  $projectId: ID!,
+                  $itemId: ID!,
+                  $fieldId: ID!
+                ) {
+                  clearProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId
+                  }) {
+                    projectV2Item { id }
+                  }
+                }`,
+                {
+                  projectId: project.id,
+                  itemId,
+                  fieldId
+                }
+              );
+            }
+
+            async function addItem(contentId) {
+              const result = await graphql(
+                `mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: {
+                    projectId: $projectId,
+                    contentId: $contentId
+                  }) {
+                    item { id }
+                  }
+                }`,
+                {
+                  projectId: project.id,
+                  contentId
+                }
+              );
+
+              return result.addProjectV2ItemById.item.id;
+            }
+
+            async function unarchiveItem(itemId) {
+              await graphql(
+                `mutation($projectId: ID!, $itemId: ID!) {
+                  unarchiveProjectV2Item(input: {
+                    projectId: $projectId,
+                    itemId: $itemId
+                  }) {
+                    item { id }
+                  }
+                }`,
+                {
+                  projectId: project.id,
+                  itemId
+                }
+              );
+              core.info("Item desarquivado.");
+            }
+
+            // Procura itens ativos e arquivados, percorrendo todas as páginas.
+            async function findItem(contentId) {
+              let cursor = null;
+
+              do {
+                const result = await graphql(
+                  `query(
+                    $owner: String!,
+                    $number: Int!,
+                    $cursor: String
+                  ) {
+                    organization(login: $owner) {
+                      projectV2(number: $number) {
+                        items(
+                          first: 100,
+                          after: $cursor,
+                          archivedStates: [ARCHIVED, NOT_ARCHIVED]
+                        ) {
+                          nodes {
+                            id
+                            isArchived
+                            content {
+                              ... on Issue { id }
+                              ... on PullRequest { id }
+                            }
+                          }
+                          pageInfo {
+                            hasNextPage
+                            endCursor
+                          }
+                        }
+                      }
+                    }
+                  }`,
+                  {
+                    owner,
+                    number: projectNumber,
+                    cursor
+                  }
+                );
+
+                const connection =
+                  result.organization.projectV2.items;
+
+                const found = connection.nodes.find(
+                  item => item.content?.id === contentId
+                );
+
+                if (found) return found;
+
+                if (!connection.pageInfo.hasNextPage) break;
+                cursor = connection.pageInfo.endCursor;
+              } while (true);
+
+              return null;
+            }
+
+            // Preenche Start date para cartões movidos manualmente para
+            // Todo ou In Progress. Como Projects não dispara esses eventos
+            // neste workflow, a rotina agendada faz a reconciliação diária.
+            async function syncMissingStartDates() {
+              let cursor = null;
+              let updatedCount = 0;
+
+              do {
+                const result = await graphql(
+                  `query(
+                    $owner: String!,
+                    $number: Int!,
+                    $cursor: String
+                  ) {
+                    organization(login: $owner) {
+                      projectV2(number: $number) {
+                        items(first: 100, after: $cursor, archivedStates: [NOT_ARCHIVED]) {
+                          nodes {
+                            id
+                            statusValue: fieldValueByName(name: "Status") {
+                              ... on ProjectV2ItemFieldSingleSelectValue {
+                                name
+                              }
+                            }
+                            startValue: fieldValueByName(name: "Start date") {
+                              ... on ProjectV2ItemFieldDateValue {
+                                date
+                              }
+                            }
+                          }
+                          pageInfo {
+                            hasNextPage
+                            endCursor
+                          }
+                        }
+                      }
+                    }
+                  }`,
+                  { owner, number: projectNumber, cursor }
+                );
+
+                const connection = result.organization.projectV2.items;
+
+                for (const item of connection.nodes) {
+                  const status = item.statusValue?.name;
+                  if (status !== "Todo" && status !== "In Progress") continue;
+                  if (item.startValue?.date) continue;
+
+                  await setDate(item.id, startField.id, todayInBrazil());
+                  updatedCount++;
+                  core.info(`Start date preenchida para item ${item.id}.`);
+                }
+
+                if (!connection.pageInfo.hasNextPage) break;
+                cursor = connection.pageInfo.endCursor;
+              } while (true);
+
+              core.info(`Total de Start dates preenchidas: ${updatedCount}.`);
+            }
+
+            // Arquiva itens concluídos há pelo menos 30 dias,
+            // desde que o cartão e o conteúdo não tenham sido
+            // atualizados desde o início desse período.
+            async function archiveCompletedItems() {
+              const cutoff = new Date();
+              cutoff.setUTCDate(cutoff.getUTCDate() - 30);
+              const cutoffDate = cutoff.toISOString().slice(0, 10);
+              const cutoffTimestamp = cutoff.getTime();
+
+              let cursor = null;
+              let archivedCount = 0;
+
+              do {
+                const result = await graphql(
+                  `query(
+                    $owner: String!,
+                    $number: Int!,
+                    $cursor: String,
+                    $completionFieldName: String!
+                  ) {
+                    organization(login: $owner) {
+                      projectV2(number: $number) {
+                        items(
+                          first: 100,
+                          after: $cursor,
+                          archivedStates: [NOT_ARCHIVED]
+                        ) {
+                          nodes {
+                            id
+                            updatedAt
+                            statusValue: fieldValueByName(name: "Status") {
+                              ... on ProjectV2ItemFieldSingleSelectValue {
+                                name
+                              }
+                            }
+                            completionValue: fieldValueByName(name: $completionFieldName) {
+                              ... on ProjectV2ItemFieldDateValue {
+                                date
+                              }
+                            }
+                            content {
+                              ... on Issue {
+                                id
+                                state
+                                stateReason
+                                updatedAt
+                              }
+                              ... on PullRequest {
+                                id
+                                state
+                                merged
+                                updatedAt
+                              }
+                            }
+                          }
+                          pageInfo {
+                            hasNextPage
+                            endCursor
+                          }
+                        }
+                      }
+                    }
+                  }`,
+                  {
+                    owner,
+                    number: projectNumber,
+                    cursor,
+                    completionFieldName: completedField.name
+                  }
+                );
+
+                const connection =
+                  result.organization.projectV2.items;
+
+                for (const item of connection.nodes) {
+                  const content = item.content;
+                  const completedDate = item.completionValue?.date;
+
+                  if (!content || !completedDate) continue;
+                  if (item.statusValue?.name !== "Done") continue;
+                  if (completedDate > cutoffDate) continue;
+
+                  if (new Date(item.updatedAt).getTime() > cutoffTimestamp) {
+                    continue;
+                  }
+
+                  if (new Date(content.updatedAt).getTime() > cutoffTimestamp) {
+                    continue;
+                  }
+
+                  const isCompletedIssue =
+                    content.state === "CLOSED" &&
+                    content.stateReason === "COMPLETED";
+
+                  const isMergedPR =
+                    content.merged === true;
+
+                  if (!isCompletedIssue && !isMergedPR) continue;
+
+                  await graphql(
+                    `mutation($projectId: ID!, $itemId: ID!) {
+                      archiveProjectV2Item(input: {
+                        projectId: $projectId,
+                        itemId: $itemId
+                      }) {
+                        item { id }
+                      }
+                    }`,
+                    {
+                      projectId: project.id,
+                      itemId: item.id
+                    }
+                  );
+
+                  archivedCount++;
+                  core.info(`Item ${item.id} arquivado.`);
+                }
+
+                if (!connection.pageInfo.hasNextPage) break;
+                cursor = connection.pageInfo.endCursor;
+              } while (true);
+
+              core.info(`Total de itens arquivados: ${archivedCount}.`);
+            }
+
+            // A execução manual valida a configuração sem alterar cartões.
+            if (context.eventName === "workflow_dispatch") {
+              core.info("Configuração validada. Nenhum cartão foi alterado.");
+              return;
+            }
+
+            // A rotina agendada só arquiva itens concluídos.
+            if (context.eventName === "schedule") {
+              await syncMissingStartDates();
+              await archiveCompletedItems();
+              return;
+            }
+
+            const payload = context.payload;
+            const content =
+              payload.issue ??
+              payload.pull_request_review?.pull_request ??
+              payload.pull_request;
+
+            if (!content?.node_id) {
+              fail("Não foi possível identificar a issue ou pull request.");
+            }
+
+            let item = await findItem(content.node_id);
+            if (!item) {
+              const itemId = await addItem(content.node_id);
+              item = { id: itemId, isArchived: false };
+              core.info("Item adicionado ao Project.");
+            }
+
+            if (item.isArchived) {
+              const isReopened =
+                context.eventName === "issues" &&
+                payload.action === "reopened" ||
+                context.eventName === "pull_request" &&
+                payload.action === "reopened";
+
+              if (isReopened) {
+                await unarchiveItem(item.id);
+              } else {
+                core.info("Item já arquivado; nenhuma alteração de status.");
+                return;
+              }
+            }
+
+            // Sempre sincroniza o campo Repositório com o repositório
+            // que originou o evento.
+            await setRepository(item.id);
+
+            const today = todayInBrazil();
+            const action = payload.action;
+
+            if (context.eventName === "issues") {
+              if (action === "opened") {
+                await setStatus(item.id, "Backlog");
+              }
+
+              if (action === "closed" &&
+                  payload.issue.state_reason === "completed") {
+                await setStatus(item.id, "Done");
+                await setDate(item.id, completedField.id, today);
+              }
+
+              if (action === "reopened") {
+                await setStatus(item.id, "In Progress");
+                await clearDate(item.id, completedField.id);
+              }
+            }
+
+            if (context.eventName === "pull_request") {
+              if (action === "opened") {
+                await setStatus(
+                  item.id,
+                  payload.pull_request.draft
+                    ? "In Progress"
+                    : "In Review"
+                );
+              }
+
+              if (action === "ready_for_review") {
+                await setStatus(item.id, "In Review");
+              }
+
+              if (action === "converted_to_draft") {
+                await setStatus(item.id, "In Progress");
+              }
+
+              if (action === "closed" &&
+                  payload.pull_request.merged === true) {
+                await setStatus(item.id, "Done");
+                await setDate(item.id, completedField.id, today);
+              }
+
+              if (action === "reopened") {
+                await setStatus(item.id, "In Progress");
+                await clearDate(item.id, completedField.id);
+              }
+            }
+
+            if (context.eventName === "pull_request_review" &&
+                action === "submitted") {
+              const reviewState = payload.review.state;
+
+              if (reviewState === "changes_requested") {
+                await setStatus(item.id, "In Progress");
+              }
+
+              if (reviewState === "approved") {
+                await setStatus(item.id, "In Review");
+              }
+            }
+
+            core.info("Sincronização concluída.");
