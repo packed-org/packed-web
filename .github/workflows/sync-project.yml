@@ -51,6 +51,9 @@ jobs:
             const projectNumber = Number(process.env.PROJECT_NUMBER);
             const repoName = process.env.REPOSITORY_NAME;
             const { graphql } = github;
+            const issueFieldsGraphql = graphql.defaults({
+              headers: { "GraphQL-Features": "issue_fields" }
+            });
 
             const allowedRepos = ["packed-api", "packed-web"];
             const statusNames = [
@@ -121,7 +124,7 @@ jobs:
             const fields = project.fields.nodes;
             const statusField = fields.find(f => f.name === "Status");
             const repoField = fields.find(f => f.name === "Repositório");
-            const startField = fields.find(f => f.name === "Start date");
+            const projectStartField = fields.find(f => f.name === "Start date");
             const completedField = fields.find(f => ["Completion date", "Date completed"].includes(f.name));
 
             if (!statusField?.options) {
@@ -144,8 +147,32 @@ jobs:
               }
             }
 
-            if (!startField) {
-              fail('Campo de data "Start date" não encontrado.');
+            if (!projectStartField) {
+              fail('Campo de data "Start date" não encontrado no projeto.');
+            }
+
+            // O ID do campo no Project (PVTF_...) não é o ID do Issue Field.
+            // Resolve o ID real do Issue Field da organização pelo nome.
+            const issueFieldsData = await issueFieldsGraphql(
+              `query($owner: String!) {
+                organization(login: $owner) {
+                  issueFields(first: 100) {
+                    nodes {
+                      ... on IssueFieldDate {
+                        id
+                        name
+                      }
+                    }
+                  }
+                }
+              }`,
+              { owner }
+            );
+            const startIssueField = issueFieldsData.organization?.issueFields?.nodes
+              ?.find(field => field.name === "Start date");
+
+            if (!startIssueField) {
+              fail('Issue Field de data "Start date" não encontrado na organização.');
             }
 
             if (!completedField) {
@@ -232,14 +259,41 @@ jobs:
               );
             }
 
+            // Start date é um Issue Field, não um campo de data comum do Project.
+            // Por isso, sua leitura e atualização precisam usar a API de Issue Fields.
+            async function setIssueDate(issueId, fieldId, date) {
+              await issueFieldsGraphql(
+                `mutation($issueId: ID!, $fieldId: ID!, $date: String!) {
+                  updateIssueFieldValue(input: {
+                    issueId: $issueId,
+                    issueField: {
+                      fieldId: $fieldId,
+                      dateValue: $date
+                    }
+                  }) {
+                    issue { id }
+                  }
+                }`,
+                { issueId, fieldId, date }
+              );
+            }
+
             async function ensureStartDate(itemId) {
-              const result = await graphql(
+              const result = await issueFieldsGraphql(
                 `query($itemId: ID!) {
                   node(id: $itemId) {
                     ... on ProjectV2Item {
+                      content {
+                        ... on Issue { id }
+                      }
                       fieldValueByName(name: "Start date") {
                         ... on ProjectV2ItemFieldDateValue {
                           date
+                        }
+                        ... on ProjectV2ItemIssueFieldValue {
+                          issueFieldValue {
+                            ... on IssueFieldDateValue { value }
+                          }
                         }
                       }
                     }
@@ -248,11 +302,16 @@ jobs:
                 { itemId }
               );
 
-              const currentDate = result.node?.fieldValueByName?.date;
-              if (!currentDate) {
-                await setDate(itemId, startField.id, todayInBrazil());
-                core.info('Campo "Start date" preenchido.');
-              }
+              const item = result.node;
+              const fieldValue = item?.fieldValueByName;
+              const currentDate = fieldValue?.date ?? fieldValue?.issueFieldValue?.value;
+              const issueId = item?.content?.id;
+
+              // Pull requests não possuem Issue Fields; não tentamos atualizá-las.
+              if (!issueId || currentDate) return;
+
+              await setIssueDate(issueId, startIssueField.id, todayInBrazil());
+              core.info('Campo "Start date" preenchido.');
             }
 
             async function clearDate(itemId, fieldId) {
@@ -380,7 +439,7 @@ jobs:
               let updatedCount = 0;
 
               do {
-                const result = await graphql(
+                const result = await issueFieldsGraphql(
                   `query(
                     $owner: String!,
                     $number: Int!,
@@ -396,9 +455,19 @@ jobs:
                                 name
                               }
                             }
-                            startValue: fieldValueByName(name: "Start date") {
-                              ... on ProjectV2ItemFieldDateValue {
-                                date
+                            content {
+                              ... on Issue {
+                                id
+                                issueFieldValues(first: 100) {
+                                  nodes {
+                                    ... on IssueFieldDateValue {
+                                      value
+                                      field {
+                                        ... on IssueFieldDate { name }
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -418,11 +487,19 @@ jobs:
                 for (const item of connection.nodes) {
                   const status = item.statusValue?.name;
                   if (status !== "Todo" && status !== "In Progress") continue;
-                  if (item.startValue?.date) continue;
 
-                  await setDate(item.id, startField.id, todayInBrazil());
+                  // Start date é um Issue Field; Pull Requests não possuem esse campo.
+                  const issue = item.content;
+                  if (!issue?.id) continue;
+
+                  const hasStartDate = (issue.issueFieldValues?.nodes ?? []).some(
+                    value => value.field?.name === "Start date" && Boolean(value.value)
+                  );
+                  if (hasStartDate) continue;
+
+                  await setIssueDate(issue.id, startIssueField.id, todayInBrazil());
                   updatedCount++;
-                  core.info(`Start date preenchida para item ${item.id}.`);
+                  core.info(`Start date preenchida para issue ${issue.id}.`);
                 }
 
                 if (!connection.pageInfo.hasNextPage) break;
