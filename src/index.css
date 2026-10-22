@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /* ========================================
+     PACKED — PALETA DE CORES
+     ======================================== */
+
+  /* Petróleo — textos, fundos escuros e splash */
+  --color-petroleo: #0b2b33;
+  --color-petroleo-light: #f4f7f7;
+  --color-petroleo-soft: #d9e3e3;
+
+  /* Teal — marca, ícones, barras e botões */
+  --color-teal: #078d8c;
+  --color-teal-dark: #056b6a;
+  --color-teal-light: #e1f1f1;
+  --color-teal-soft: #cde8e8;
+
+  /* Sol — foco, avisos e itens gerais */
+  --color-sol: #ffc20b;
+  --color-sol-light: #fff8e2;
+  --color-sol-soft: #fff0c2;
+
+  /* Beleza — categoria e modo offline */
+  --color-beleza: #f3620f;
+  --color-beleza-light: #feece2;
+  --color-beleza-soft: #fdd9c5;
+
+  /* Verde — itens separados e sucesso */
+  --color-sucesso: #68934b;
+  --color-sucesso-light: #eaf0e6;
+  --color-sucesso-soft: #d6e3ce;
+
+  /* Azul — clima, higiene e informação */
+  --color-clima: #094a74;
+  --color-clima-light: #e6edf3;
+  --color-clima-soft: #cedbe3;
+
+  /* Vermelho — erros e remoção */
+  --color-erro: #da0d1e;
+  --color-erro-light: #fbe7e8;
+  --color-erro-soft: #f6c7ca;
+
+  /* Textos sobre fundos claros */
+  --color-sol-dark: #735500;
+  --color-beleza-dark: #9b3d0a;
+  --color-sucesso-dark: #385a24;
+  --color-clima-dark: #063451;
+  --color-erro-dark: #a30b18;
+}
+/* Reset para garantir que a aplicação ocupa 100% da ecrã sem limites */
+html, body, #root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
