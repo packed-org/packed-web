@@ -19,12 +19,12 @@ export function AppRoutes() {
       <Routes>
         {/* Rotas Públicas (Auth) */}
         <Route path="/" element={<Splash />} />
-        {/* <Route path="/login" element={<Login />} />
-        <Route path="/cadastro" element={<Register />} /> */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/cadastro" element={<Register />} />
 
         {/* Rotas Privadas (Viagens) */}
-        {/* <Route path="/viagens" element={<TripsList />} />
-        <Route path="/viagens/nova" element={<NewTrip />} /> */}
+        <Route path="/viagens" element={<TripsList />} />
+        <Route path="/viagens/nova" element={<NewTrip />} />
 
         {/* Rotas Privadas (Bagagem) */}
         {/* <Route path="/mala/:id" element={<PackingList />} />
