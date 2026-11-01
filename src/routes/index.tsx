@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+// Importando o Layout Responsivo
+import { MainLayout } from '@/layouts/MainLayout';
+
 // Importando páginas do módulo Auth
 import { Splash } from '@/modules/auth/pages/Splash';
 import { Login } from '@/modules/auth/pages/Login';
@@ -17,18 +20,24 @@ export function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rotas Públicas (Auth) */}
+        {/* Rotas Públicas (Sem Menu) */}
         <Route path="/" element={<Splash />} />
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
 
-        {/* Rotas Privadas (Viagens) */}
-        <Route path="/viagens" element={<TripsList />} />
-        <Route path="/viagens/nova" element={<NewTrip />} />
+        {/* Rotas Privadas COM Menu (Layout Responsivo) */}
+        {/* Tudo que estiver dentro deste Route renderizará o Sidebar/BottomNav em volta */}
+        <Route element={<MainLayout />}>
+          <Route path="/viagens" element={<TripsList />} />
+          
+          {/* Se a tela de mala e insights precisar do menu, basta descomentar aqui dentro: */}
+          <Route path="/mala/:id" element={<PackingList />} />
+          {/* <Route path="/mala/:id/insights" element={<PackingInsights />} /> */}
+        </Route>
 
-        {/* Rotas Privadas (Bagagem) */}
-        {/* <Route path="/mala/:id" element={<PackingList />} />
-        <Route path="/mala/:id/insights" element={<PackingInsights />} /> */}
+        {/* Rotas Privadas SEM Menu (Tela Cheia) */}
+        {/* O fluxo de Nova Viagem fica melhor em tela cheia para manter o foco do usuário */}
+        <Route path="/viagens/nova" element={<NewTrip />} />
         
         {/* Fallback - Redireciona rotas inexistentes para a Splash */}
         {/* <Route path="*" element={<Navigate to="/" replace />} /> */}

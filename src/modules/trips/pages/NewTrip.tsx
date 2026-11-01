@@ -1,33 +1,30 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Info, Check } from 'lucide-react';
+import { ChevronLeft, Info, Check, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { DatePicker } from '@/components/ui/datepicker';
 
 const AVAILABLE_ACTIVITIES = [
   'Trilhas',
-  'Experiências gastronômicas',
   'Esporte',
   'Nadar',
   'Museus',
   'Praia & Mar',
-  'Compras',
   'Vida noturna',
-  'Fotografia',
-  'Relaxamento & Spa',
-  'Trabalho / Remote',
-  'Parques de diversão',
+  'Trabalho',
+  'Turismo'
 ];
 
 export function NewTrip() {
   const navigate = useNavigate();
 
   const [destination, setDestination] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
   const [selectedActivities, setSelectedActivities] = useState<string[]>(['Trilhas']);
 
   const toggleActivity = (activity: string) => {
@@ -38,10 +35,25 @@ export function NewTrip() {
     );
   };
 
+  const handleStartDateChange = (date?: Date) => {
+    setStartDate(date);
+    if (date && endDate && endDate < date) {
+      setEndDate(undefined);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!destination.trim()) return;
+    if (!destination.trim()) {
+      toast.error('Por favor, informe o destino.');
+      return;
+    }
+
+    if (!startDate || !endDate) {
+      toast.error('Selecione as datas de ida e volta.');
+      return;
+    }
 
     const parts = destination.split(',');
     const destName = parts[0]?.trim() || destination;
@@ -51,8 +63,8 @@ export function NewTrip() {
       id: Date.now().toString(),
       destination: destName,
       country: countryName,
-      startDate,
-      endDate,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
       activities: selectedActivities,
     };
 
@@ -60,7 +72,6 @@ export function NewTrip() {
     const trips = storedTrips ? JSON.parse(storedTrips) : [];
     localStorage.setItem('packed_trips', JSON.stringify([newTrip, ...trips]));
 
-    // Disparo de toast nativo do Sonner
     toast.success('Viagem criada com sucesso!', {
       description: `Planejamento para ${destName} foi salvo.`,
     });
@@ -101,15 +112,18 @@ export function NewTrip() {
               <Label htmlFor="destination" className="text-sm font-bold text-petroleo">
                 Destino
               </Label>
-              <Input
-                id="destination"
-                type="text"
-                placeholder="Lisboa, Portugal"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                required
-                className="bg-white border-none shadow-xs text-petroleo placeholder:text-slate-400 h-13 px-4 rounded-xl text-base focus-visible:ring-2 focus-visible:ring-teal"
-              />
+              <div className="relative flex items-center">
+                <MapPin className="absolute left-4 w-5 h-5 text-slate-400 pointer-events-none shrink-0" />
+                <Input
+                  id="destination"
+                  type="text"
+                  placeholder="Lisboa, Portugal"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  required
+                  className="bg-white border-none shadow-xs text-petroleo placeholder:text-slate-400 h-13 pl-11 pr-4 rounded-xl text-base focus-visible:ring-2 focus-visible:ring-teal w-full"
+                />
+              </div>
             </div>
 
             {/* Período da Viagem */}
@@ -120,30 +134,25 @@ export function NewTrip() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-semibold text-slate-500">Ida</span>
-                  <Input
-                    type="text"
-                    placeholder="18 / 10 / 2001"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    required
-                    className="bg-white border-none shadow-xs text-petroleo placeholder:text-slate-400 h-12 px-4 rounded-xl text-sm focus-visible:ring-2 focus-visible:ring-teal"
+                  <DatePicker 
+                    date={startDate} 
+                    setDate={handleStartDateChange} 
+                    placeholder="Selecione a ida"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-semibold text-slate-500">Volta</span>
-                  <Input
-                    type="text"
-                    placeholder="19 / 10 / 2001"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    required
-                    className="bg-white border-none shadow-xs text-petroleo placeholder:text-slate-400 h-12 px-4 rounded-xl text-sm focus-visible:ring-2 focus-visible:ring-teal"
+                  <DatePicker 
+                    date={endDate} 
+                    setDate={setEndDate} 
+                    placeholder="Selecione a volta" 
+                    disabled={(date) => startDate ? date < startDate : false}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Atividades com Badges do Shadcn */}
+            {/* Atividades */}
             <div className="flex flex-col gap-3">
               <Label className="text-sm font-bold text-petroleo">
                 Atividades da viagem
