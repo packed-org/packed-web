@@ -16,6 +16,8 @@
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@dotlottie/react-player": "^1.6.19",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@heroui/date-picker": "^2.3.33",
     "@internationalized/date": "^3.12.4",

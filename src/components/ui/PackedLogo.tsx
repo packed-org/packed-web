@@ -67,3 +67,4 @@ export const PackedLogo: React.FC<PackedLogoProps> = ({
     </div>
   );
 };
+
