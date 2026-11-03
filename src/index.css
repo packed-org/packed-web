@@ -1,62 +1,107 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/bricolage-grotesque/standard.css";
+@import "@fontsource-variable/dm-sans/standard.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
   /* ========================================
-     PACKED — PALETA DE CORES
+     PACKED — DESIGN SYSTEM (PALETA DE CORES)
      ======================================== */
 
-  /* Petróleo — textos, fundos escuros e splash */
+  /* Petróleo — textos e fundos escuros */
   --color-petroleo: #0b2b33;
   --color-petroleo-light: #f4f7f7;
   --color-petroleo-soft: #d9e3e3;
 
-  /* Teal — marca, ícones, barras e botões */
-  --color-teal: #078d8c;
-  --color-teal-dark: #056b6a;
-  --color-teal-light: #e1f1f1;
+  /* Teal — ação primária (5,3:1 com branco) */
+  --color-teal: #0b7a75;
+  --color-teal-dark: #085e5a;
+  --color-teal-light: #e3f1ef;
   --color-teal-soft: #cde8e8;
 
-  /* Sol — foco, avisos e itens gerais */
-  --color-sol: #ffc20b;
+  /* Sol — visto, foco, destaques pontuais */
+  --color-sol: #f2b640;
   --color-sol-light: #fff8e2;
-  --color-sol-soft: #fff0c2;
+  --color-sol-soft: #fbefd5;
+  --color-sol-dark: #735500;
 
-  /* Beleza — categoria e modo offline */
-  --color-beleza: #f3620f;
-  --color-beleza-light: #feece2;
-  --color-beleza-soft: #fdd9c5;
+  /* Coral — erro e alertas críticos */
+  --color-coral: #c93e22;
+  --color-coral-light: #fdf2f0;
+  --color-coral-soft: #fbe3dc;
 
-  /* Verde — itens separados e sucesso */
+  /* Névoa — fundo base do app */
+  --color-nevoa: #f3f7f6;
+
+  /* Categorias de itens */
+  --color-cat-roupas: #e3f1ef;
+  --color-cat-higiene: #ddeff7;
+  --color-cat-beleza: #fbe3dc;
+  --color-cat-gerais: #fbefd5;
+
+  /* Legados mantidos para compatibilidade */
   --color-sucesso: #68934b;
   --color-sucesso-light: #eaf0e6;
-  --color-sucesso-soft: #d6e3ce;
-
-  /* Azul — clima, higiene e informação */
-  --color-clima: #094a74;
-  --color-clima-light: #e6edf3;
-  --color-clima-soft: #cedbe3;
-
-  /* Vermelho — erros e remoção */
-  --color-erro: #da0d1e;
-  --color-erro-light: #fbe7e8;
-  --color-erro-soft: #f6c7ca;
-
-  /* Textos sobre fundos claros */
-  --color-sol-dark: #735500;
-  --color-beleza-dark: #9b3d0a;
   --color-sucesso-dark: #385a24;
-  --color-clima-dark: #063451;
-  --color-erro-dark: #a30b18;
+  --color-erro: #c93e22;
+  --color-erro-light: #fdf2f0;
+  --color-erro-soft: #fbe3dc;
+  --color-erro-dark: #9e2a14;
+  --color-clima: #094a74;
+  --color-clima-light: #ddeff7;
+
+  /* Tipografia */
+  --font-sans: 'DM Sans Variable', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
 }
-/* Reset para garantir que a aplicação ocupa 100% da ecrã sem limites */
+
+/* Base Global */
 html, body, #root {
   width: 100%;
   min-height: 100vh;
   margin: 0;
   padding: 0;
+  background-color: var(--color-nevoa);
+  color: var(--color-petroleo);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Títulos e destaques em Bricolage Grotesque com eixo wdth no máximo (100 - achatada/expandida) */
+:is(.font-heading, h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-heading);
+  font-stretch: 100%;
+  font-variation-settings: "wdth" 100, "opsz" 96;
+  letter-spacing: -0.025em;
+}
+
+:is(.font-heading, h1, h2, h3, h4, h5, h6).font-normal {
+  font-variation-settings: "wdth" 100, "wght" 400, "opsz" 96;
+}
+
+:is(.font-heading, h1, h2, h3, h4, h5, h6).font-medium {
+  font-variation-settings: "wdth" 100, "wght" 500, "opsz" 96;
+}
+
+:is(.font-heading, h1, h2, h3, h4, h5, h6).font-semibold {
+  font-variation-settings: "wdth" 100, "wght" 600, "opsz" 96;
+}
+
+:is(.font-heading, h1, h2, h3, h4, h5, h6).font-bold {
+  font-variation-settings: "wdth" 100, "wght" 700, "opsz" 96;
+}
+
+:is(.font-heading, h1, h2, h3, h4, h5, h6).font-extrabold {
+  font-variation-settings: "wdth" 100, "wght" 800, "opsz" 96;
+}
+
+/* Transições suaves */
+.transition-default {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
 }
