@@ -19,7 +19,7 @@ export function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rota Inicial (Splash com redirecionamento inteligente) */}
+        {/* Rota Inicial (Splash com Lottie e 3s mínimo) */}
         <Route path="/" element={<Splash />} />
 
         {/* Rotas Públicas (Visitantes) */}
@@ -28,6 +28,7 @@ export function AppRoutes() {
           <Route path="/cadastro" element={<Register />} />
           <Route path="/verificar-email" element={<VerifyEmail />} />
           <Route path="/recuperar-senha" element={<ForgotPassword />} />
+          <Route path="/esqueci-senha" element={<ForgotPassword />} />
         </Route>
 
         {/* Rotas Autenticadas com Shell Responsivo (Sidebar Desktop + BottomNav Mobile) */}
@@ -36,6 +37,8 @@ export function AppRoutes() {
             <Route path="/viagens" element={<TripsList />} />
             <Route path="/viagens/nova" element={<NewTrip />} />
             <Route path="/viagens/:id/editar" element={<NewTrip />} />
+            <Route path="/viagens/:id/mala" element={<PackingList />} />
+            <Route path="/viagens/:id/insights" element={<PackingInsights />} />
             <Route path="/mala/:id" element={<PackingList />} />
             <Route path="/mala/:id/insights" element={<PackingInsights />} />
             <Route path="/perfil" element={<Profile />} />

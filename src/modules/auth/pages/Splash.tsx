@@ -1,44 +1,53 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import logoPacked from '@/assets/Logo_Packed.svg';
 import { useAuth } from '@/store/AuthContext';
+import { LottieLoader } from '@/components/ui/LottieLoader';
+import { PackedLogo } from '@/components/ui/PackedLogo';
 
 export function Splash() {
   const { isAuthenticated, isInitializing } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
 
+  // Force minimum 3 seconds display
   useEffect(() => {
-    if (isInitializing || location.pathname !== '/') return;
-
     const timer = setTimeout(() => {
-      navigate(isAuthenticated ? '/viagens' : '/login', { replace: true });
-    }, 450);
+      setMinTimeElapsed(true);
+    }, 3000);
 
     return () => clearTimeout(timer);
-  }, [isAuthenticated, isInitializing, location.pathname, navigate]);
+  }, []);
+
+  // Redirect after min time and auth initialization
+  useEffect(() => {
+    if (!minTimeElapsed || isInitializing || location.pathname !== '/') return;
+
+    navigate(isAuthenticated ? '/viagens' : '/login', { replace: true });
+  }, [minTimeElapsed, isInitializing, isAuthenticated, location.pathname, navigate]);
 
   return (
-    <div className="flex min-h-screen w-full flex-col items-center justify-between bg-petroleo p-6 md:p-12 select-none">
+    <div className="flex min-h-screen w-full flex-col items-center justify-between bg-[#0B2B33] p-6 md:p-12 select-none text-white">
       <div className="flex-1" />
 
-      <div className="flex flex-col items-center justify-center gap-3">
-        <img
-          src={logoPacked}
-          alt="PACKED"
-          className="w-48 md:w-64 max-w-full object-contain transition-transform duration-300"
-        />
-        <p className="text-xs font-semibold tracking-widest uppercase text-teal-soft/80">
-          Bagagem inteligente para qualquer destino
-        </p>
+      <div className="flex flex-col items-center justify-center gap-4 text-center max-w-sm">
+        {/* Animated Lottie Logo Signature */}
+        <LottieLoader size="lg" className="p-0" />
+
+        <div className="flex flex-col items-center gap-1.5 -mt-2">
+          <PackedLogo variant="horizontal" className="h-10 md:h-12 w-auto brightness-110" />
+          <p className="text-sm font-medium tracking-wide text-[#F3F7F6]/80 mt-1">
+            Sua mala, sem esquecer nada.
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col justify-end w-full max-w-xs md:max-w-sm mb-8 md:mb-12 gap-2">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-petroleo-soft/20">
-          <div className="h-full w-2/3 animate-pulse rounded-full bg-sol" />
+        <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="h-full w-full animate-[progress_3s_ease-in-out_infinite] rounded-full bg-[#F2B640]" />
         </div>
-        <span className="text-[11px] text-center text-petroleo-soft/70 font-medium">
-          Preparando sua experiência...
+        <span className="text-xs text-center text-white/50 font-normal">
+          Carregando suas listas e destinos...
         </span>
       </div>
     </div>

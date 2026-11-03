@@ -18,6 +18,10 @@ export const packingService = {
     });
   },
 
+  async generateInitialList(tripId: string): Promise<PackingListResponse> {
+    return this.generatePackingList(tripId);
+  },
+
   async regeneratePackingList(tripId: string): Promise<PackingListResponse> {
     return apiRequest<PackingListResponse>(`/trips/${tripId}/packing-list/regenerate`, {
       method: 'POST',

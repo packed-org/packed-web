@@ -132,3 +132,29 @@ export interface PackingFactorsResponse {
   factors: PackingFactorItem[];
 }
 
+
+export interface DailyForecastItem {
+  date: string;
+  temp_min_c: number | null;
+  temp_max_c: number | null;
+  precip_mm: number | null;
+  precip_probability_pct: number | null;
+  condition_code: string;
+  condition_label: string;
+  source: string;
+}
+
+export interface TripWeatherReport {
+  origin_city: string;
+  destination_city: string;
+  start_date: string;
+  duration_days: number;
+  origin_min_temp: number | null;
+  origin_max_temp: number | null;
+  dest_min_temp: number | null;
+  dest_max_temp: number | null;
+  dest_rain_prob_pct: number | null;
+  thermal_delta_c: number | null;
+  forecast_days: DailyForecastItem[];
+  warnings: string[];
+}

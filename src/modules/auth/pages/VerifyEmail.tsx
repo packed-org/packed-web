@@ -1,26 +1,28 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import logoPacked from '@/assets/Logo_Packed.svg';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PackedLogo } from '@/components/ui/PackedLogo';
+import { LottieLoader } from '@/components/ui/LottieLoader';
 import { authService } from '@/services/authService';
 import { ApiError } from '@/services/api';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 export function VerifyEmail() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [token, setToken] = useState(searchParams.get('token') || '');
-  const [email, setEmail] = useState(searchParams.get('email') || '');
+  const [email] = useState(searchParams.get('email') || '');
   const [isConfirming, setIsConfirming] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
   const handleConfirm = async (e: FormEvent) => {
     e.preventDefault();
     if (!token.trim()) {
-      toast.error('Informe o token de verificação.');
+      toast.error('Informe o código de verificação.');
       return;
     }
 
@@ -33,7 +35,7 @@ export function VerifyEmail() {
       if (error instanceof ApiError) {
         toast.error('Falha na verificação', { description: error.message });
       } else {
-        toast.error('Erro ao validar o token.');
+        toast.error('Erro ao validar o código.');
       }
     } finally {
       setIsConfirming(false);
@@ -42,19 +44,19 @@ export function VerifyEmail() {
 
   const handleResend = async () => {
     if (!email.trim()) {
-      toast.error('Informe seu e-mail para reenviar o link.');
+      toast.error('Informe seu e-mail para reenviar o código.');
       return;
     }
 
     setIsResending(true);
     try {
       await authService.resendVerificationEmail(email.trim());
-      toast.success('Se a conta existir e estiver pendente, um novo e-mail foi enviado.');
+      toast.success('Novo código enviado para sua caixa de entrada.');
     } catch (error) {
       if (error instanceof ApiError) {
         toast.error(error.message);
       } else {
-        toast.error('Não foi possível reenviar o e-mail.');
+        toast.error('Não foi possível reenviar o código.');
       }
     } finally {
       setIsResending(false);
@@ -62,79 +64,74 @@ export function VerifyEmail() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-petroleo flex flex-col items-center justify-between md:justify-center md:p-6 select-none">
-      <div className="w-full min-h-screen md:min-h-0 md:max-w-md flex flex-col justify-between bg-clima md:rounded-3xl md:shadow-2xl md:overflow-hidden">
-        <div className="flex-1 flex items-center justify-center p-6 min-h-40">
-          <img src={logoPacked} alt="PACKED" className="w-32 md:w-40 object-contain" />
+    <div className="min-h-screen w-full bg-[#F3F7F6] flex flex-col items-center justify-center p-4 sm:p-6 select-none">
+      <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-gray-100 flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <PackedLogo variant="header" size="sm" />
+          <Link
+            to="/login"
+            className="text-xs font-semibold text-gray-500 hover:text-[#0B7A75] inline-flex items-center gap-1 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Voltar ao login
+          </Link>
         </div>
 
-        <div className="bg-petroleo-light rounded-t-[36px] md:rounded-t-none p-6 md:p-8 flex flex-col gap-5 shadow-lg">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-bold text-petroleo">Ativar conta</h1>
-            <p className="text-sm text-slate-600">
-              Cole o código de verificação recebido no seu e-mail para liberar o acesso.
-            </p>
-          </div>
+        <div>
+          <h1 className="font-heading font-extrabold text-2xl text-[#0B2B33]">
+            Verifique seu e-mail
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 leading-relaxed">
+            Enviamos um código de confirmação para{' '}
+            <strong className="text-[#0B2B33]">{email || 'seu e-mail'}</strong>. Insira-o abaixo para ativar sua conta.
+          </p>
+        </div>
 
+        {isConfirming ? (
+          <div className="py-10">
+            <LottieLoader size="md" message="Confirmando seu e-mail..." />
+          </div>
+        ) : (
           <form onSubmit={handleConfirm} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="token" className="text-sm font-semibold text-petroleo">
-                Token de ativação
+              <Label htmlFor="token" className="text-sm font-semibold text-[#0B2B33]">
+                Código de ativação
               </Label>
               <Input
                 id="token"
                 type="text"
-                placeholder="Cole o token recebido por e-mail"
+                placeholder="Ex: 123456"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 required
-                className="bg-white border-petroleo-soft text-petroleo h-12 px-4 rounded-xl"
+                autoFocus
+                className="rounded-xl border-gray-200 py-3 px-3.5 focus:border-[#0B7A75] focus:ring-[#0B7A75]/20 text-sm"
               />
             </div>
 
             <Button
               type="submit"
-              variant="teal"
               disabled={isConfirming}
-              className="w-full h-12 rounded-xl font-bold text-base cursor-pointer"
+              className="w-full mt-2 py-3.5 rounded-xl bg-[#0B7A75] hover:bg-[#085E5A] text-white font-semibold text-sm shadow-sm transition-all cursor-pointer"
             >
-              {isConfirming ? 'Confirmando...' : 'Confirmar e-mail'}
+              Ativar minha conta
             </Button>
-          </form>
 
-          <div className="border-t border-petroleo-soft pt-4 flex flex-col gap-3">
-            <Label htmlFor="resend-email" className="text-xs font-semibold text-slate-600">
-              Não recebeu o código? Informe seu e-mail para reenviar:
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="resend-email"
-                type="email"
-                placeholder="voce@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="bg-white border-petroleo-soft text-petroleo h-11 px-3 rounded-xl text-sm"
-              />
-              <Button
+            <div className="pt-4 border-t border-gray-100 flex flex-col gap-2 text-center text-xs text-gray-500">
+              <p>Não recebeu o código?</p>
+              <button
                 type="button"
-                variant="outline"
                 disabled={isResending}
                 onClick={handleResend}
-                className="h-11 rounded-xl border-teal text-teal font-bold px-4 cursor-pointer"
+                className="font-semibold text-[#0B7A75] hover:text-[#085E5A] inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                {isResending ? '...' : 'Reenviar'}
-              </Button>
+                <RefreshCw className={`w-3.5 h-3.5 ${isResending ? 'animate-spin' : ''}`} />
+                Reenviar código
+              </button>
             </div>
-          </div>
-
-          <p className="text-center text-sm text-petroleo">
-            <Link to="/login" className="font-bold text-teal hover:underline">
-              Voltar para o login
-            </Link>
-          </p>
-        </div>
+          </form>
+        )}
       </div>
     </div>
   );
 }
-

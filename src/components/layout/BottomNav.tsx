@@ -10,7 +10,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 z-50 w-full h-16 bg-white/95 backdrop-blur-md border-t border-slate-200 flex items-center justify-around pb-safe shadow-lg select-none">
+    <nav className="md:hidden fixed bottom-0 left-0 z-50 w-full h-16 bg-white/95 backdrop-blur-md border-t border-gray-200 flex items-center justify-around pb-safe shadow-lg select-none">
       {navItems.map((item) => (
         <NavLink
           key={item.path}
@@ -19,7 +19,9 @@ export function BottomNav() {
           className={({ isActive }) =>
             cn(
               'flex flex-col items-center justify-center w-full h-full gap-1 transition-colors',
-              isActive ? 'text-teal font-bold' : 'text-slate-400 hover:text-petroleo font-medium'
+              isActive
+                ? 'text-[#0B7A75] font-bold'
+                : 'text-gray-400 hover:text-[#0B2B33] font-medium'
             )
           }
         >
@@ -30,4 +32,3 @@ export function BottomNav() {
     </nav>
   );
 }
-
