@@ -1,15 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { MainLayout } from '@/layouts/MainLayout';
+import { ProtectedRoute, GuestRoute } from '@/routes/ProtectedRoute';
 
-// Importando páginas do módulo Auth
 import { Splash } from '@/modules/auth/pages/Splash';
 import { Login } from '@/modules/auth/pages/Login';
 import { Register } from '@/modules/auth/pages/Register';
+import { VerifyEmail } from '@/modules/auth/pages/VerifyEmail';
+import { ForgotPassword } from '@/modules/auth/pages/ForgotPassword';
+import { Profile } from '@/modules/auth/pages/Profile';
 
-// Importando páginas do módulo Trips
 import { TripsList } from '@/modules/trips/pages/TripsList';
 import { NewTrip } from '@/modules/trips/pages/NewTrip';
 
-// Importando páginas do módulo Packing
 import { PackingList } from '@/modules/packing/pages/PackingList';
 import { PackingInsights } from '@/modules/packing/pages/PackingInsights';
 
@@ -17,21 +19,34 @@ export function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rotas Públicas (Auth) */}
+        {/* Rota Inicial (Splash com Lottie e 3s mínimo) */}
         <Route path="/" element={<Splash />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/cadastro" element={<Register />} />
 
-        {/* Rotas Privadas (Viagens) */}
-        <Route path="/viagens" element={<TripsList />} />
-        <Route path="/viagens/nova" element={<NewTrip />} />
+        {/* Rotas Públicas (Visitantes) */}
+        <Route element={<GuestRoute />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/cadastro" element={<Register />} />
+          <Route path="/verificar-email" element={<VerifyEmail />} />
+          <Route path="/recuperar-senha" element={<ForgotPassword />} />
+          <Route path="/esqueci-senha" element={<ForgotPassword />} />
+        </Route>
 
-        {/* Rotas Privadas (Bagagem) */}
-        {/* <Route path="/mala/:id" element={<PackingList />} />
-        <Route path="/mala/:id/insights" element={<PackingInsights />} /> */}
-        
-        {/* Fallback - Redireciona rotas inexistentes para a Splash */}
-        {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
+        {/* Rotas Autenticadas com Shell Responsivo (Sidebar Desktop + BottomNav Mobile) */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<MainLayout />}>
+            <Route path="/viagens" element={<TripsList />} />
+            <Route path="/viagens/nova" element={<NewTrip />} />
+            <Route path="/viagens/:id/editar" element={<NewTrip />} />
+            <Route path="/viagens/:id/mala" element={<PackingList />} />
+            <Route path="/viagens/:id/insights" element={<PackingInsights />} />
+            <Route path="/mala/:id" element={<PackingList />} />
+            <Route path="/mala/:id/insights" element={<PackingInsights />} />
+            <Route path="/perfil" element={<Profile />} />
+          </Route>
+        </Route>
+
+        {/* Fallback para rotas inexistentes */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
