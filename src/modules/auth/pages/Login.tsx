@@ -169,8 +169,8 @@ export function Login() {
         <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-[#F2B640]/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Topo / Logo Horizontal com contraste perfeito no fundo escuro */}
-        <div className="relative z-10 flex items-center">
-          <PackedLogo variant="horizontal" className="h-10 md:h-11 w-auto" />
+        <div className="relative z-10 flex items-center my-2">
+          <PackedLogo variant="horizontal" className="h-10 md:h-8 w-auto" />
         </div>
 
         {/* Mensagem Principal + Card Dinâmico */}
@@ -256,11 +256,6 @@ export function Login() {
               ))}
             </div>
           </div>
-        </div>
-
-        {/* Rodapé institucional */}
-        <div className="relative z-10 text-xs text-white/50">
-          Packed App &copy; {new Date().getFullYear()} · Viagens inteligentes
         </div>
       </div>
 
