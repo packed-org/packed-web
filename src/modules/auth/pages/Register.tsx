@@ -1,30 +1,47 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import logoPacked from '@/assets/Logo_Packed.svg';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { authService } from '@/services/authService';
+import { ApiError } from '@/services/api';
 
 export function Register() {
   const navigate = useNavigate();
 
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
+    if (password !== confirmPassword) {
+      toast.error('As senhas não coincidem.');
+      return;
+    }
+
+    if (password.length < 8) {
+      toast.error('A senha deve ter pelo menos 8 caracteres, com letras maiúsculas, minúsculas e números.');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      console.log('Dados de cadastro enviados:', { name, email, password });
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
-      // Redireciona para o login após concluir o cadastro
-      navigate('/login');
+      await authService.signup(email.trim(), password);
+      toast.success('Conta criada!', {
+        description: 'Verifique seu e-mail para ativar sua conta.',
+      });
+      navigate(`/verificar-email?email=${encodeURIComponent(email.trim())}`);
     } catch (error) {
-      console.error('Erro ao realizar cadastro:', error);
+      if (error instanceof ApiError) {
+        toast.error('Erro no cadastro', { description: error.message });
+      } else {
+        toast.error('Não foi possível conectar ao servidor.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -33,9 +50,8 @@ export function Register() {
   return (
     <div className="min-h-screen w-full bg-petroleo flex flex-col items-center justify-between md:justify-center md:p-6 select-none">
       <div className="w-full min-h-screen md:min-h-0 md:max-w-md flex flex-col justify-between bg-clima md:rounded-3xl md:shadow-2xl md:overflow-hidden">
-        
-        {/* Topo - Fundo Petróleo com Logo */}
-        <div className="flex-1 flex items-center justify-center p-6 min-h-[160px] md:min-h-[200px]">
+        {/* Topo com Logo */}
+        <div className="flex-1 flex items-center justify-center p-6 min-h-40 md:min-h-48">
           <img
             src={logoPacked}
             alt="PACKED"
@@ -46,42 +62,24 @@ export function Register() {
         {/* Card do Formulário */}
         <div className="bg-petroleo-light rounded-t-[36px] md:rounded-t-none p-6 md:p-8 flex flex-col justify-between shadow-lg">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            
-            {/* Título e Subtítulo do Figma */}
             <div className="flex flex-col gap-1">
               <h1 className="text-2xl md:text-3xl font-bold text-petroleo tracking-tight">
-                Seja bem-vindo!
+                Crie sua conta
               </h1>
               <p className="text-sm text-slate-600 leading-snug">
-                Para realizar seu cadastro preencha as informações abaixo:
+                Salve suas viagens e listas personalizadas na nuvem.
               </p>
             </div>
 
-            {/* Campo Nome */}
-            <div className="flex flex-col gap-1.5 mt-1">
-              <Label htmlFor="name" className="text-sm font-semibold text-petroleo flex gap-1">
-                Nome <span className="text-erro">*</span>
-              </Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Insira seu nome"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="bg-white border-petroleo-soft text-petroleo placeholder:text-slate-400 h-12 px-4 rounded-xl focus-visible:ring-teal focus-visible:border-teal"
-              />
-            </div>
-
             {/* Campo Email */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 mt-1">
               <Label htmlFor="email" className="text-sm font-semibold text-petroleo flex gap-1">
-                Email <span className="text-erro">*</span>
+                E-mail <span className="text-erro">*</span>
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="example@email.com"
+                placeholder="voce@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -97,25 +95,42 @@ export function Register() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••••••"
+                placeholder="Mín. 8 caracteres (Aa1)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="bg-white border-petroleo-soft text-petroleo placeholder:text-slate-400 h-12 px-4 rounded-xl focus-visible:ring-teal focus-visible:border-teal"
               />
+              <span className="text-[11px] text-slate-500">
+                Use no mínimo 8 caracteres com letra maiúscula, minúscula e número.
+              </span>
             </div>
 
-            {/* Botão Cadastro */}
+            {/* Confirmar Senha */}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="confirmPassword" className="text-sm font-semibold text-petroleo flex gap-1">
+                Confirmar senha <span className="text-erro">*</span>
+              </Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Repita sua senha"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="bg-white border-petroleo-soft text-petroleo placeholder:text-slate-400 h-12 px-4 rounded-xl focus-visible:ring-teal focus-visible:border-teal"
+              />
+            </div>
+
             <Button
               type="submit"
               variant="teal"
               disabled={isLoading}
-              className="w-full h-12 rounded-xl text-base font-bold mt-2 shadow-sm"
+              className="w-full h-12 rounded-xl text-base font-bold mt-2 shadow-sm cursor-pointer"
             >
-              {isLoading ? 'Cadastrando...' : 'Cadastro'}
+              {isLoading ? 'Criando conta...' : 'Cadastrar'}
             </Button>
 
-            {/* Link de Retorno para Login */}
             <p className="text-center text-sm text-petroleo mt-1">
               Já tem uma conta?{' '}
               <Link
@@ -127,10 +142,8 @@ export function Register() {
             </p>
           </form>
 
-          {/* Espaçador para Safe Area em Mobile */}
-          <div className="h-6 md:h-0" />
+          <div className="h-4 md:h-0" />
         </div>
-
       </div>
     </div>
   );

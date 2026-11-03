@@ -1,26 +1,33 @@
 import { Outlet } from 'react-router-dom';
-import { Sidebar } from '@/components/ui/sidebar';
-import { BottomNav } from '@/components/ui/bottomNavbar';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { BottomNav } from '@/components/layout/BottomNav';
+import { useNetworkStatus } from '@/platform/pwa/useNetworkStatus';
+import { WifiOff } from 'lucide-react';
 
 export function MainLayout() {
+  const isOnline = useNetworkStatus();
+
   return (
-    <div className="flex min-h-screen w-full bg-slate-50">
-      
-      {/* Menu Lateral - Oculto em telas pequenas (< md), visível em Desktop */}
-      <aside className="hidden md:flex flex-col w-72 border-r border-slate-200 bg-white fixed h-screen left-0 top-0">
+    <div className="flex min-h-screen w-full bg-petroleo-light">
+      {/* Menu Lateral fixo no Desktop */}
+      <aside className="hidden md:flex flex-col w-72 fixed h-screen left-0 top-0 z-30 shadow-xl">
         <Sidebar />
       </aside>
 
-      {/* 
-        Conteúdo Principal 
-        - No Desktop (md:ml-72): empurra o conteúdo para a direita do menu fixo.
-        - No Mobile (pb-16): adiciona padding inferior para o conteúdo não ficar escondido pela BottomNav.
-      */}
-      <main className="flex-1 w-full max-w-full md:ml-72 pb-16 md:pb-0">
-        <Outlet />
+      {/* Conteúdo Principal */}
+      <main className="flex-1 w-full max-w-full md:ml-72 pb-20 md:pb-8 flex flex-col">
+        {!isOnline && (
+          <div className="bg-beleza text-white px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 shadow-xs">
+            <WifiOff className="w-4 h-4 shrink-0" />
+            <span>Modo Offline ativo — exibindo dados salvos no dispositivo.</span>
+          </div>
+        )}
+        <div className="flex-1 w-full">
+          <Outlet />
+        </div>
       </main>
 
-      {/* Barra Inferior - Visível apenas em telas pequenas (Mobile/Capacitor) */}
+      {/* Barra Inferior para Mobile / PWA */}
       <BottomNav />
     </div>
   );

@@ -1,242 +1,524 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { 
-  ChevronLeft, 
-  Edit3, 
-  Info, 
-  Shirt, 
-  Droplet, 
-  Star, 
+import {
+  ChevronLeft,
+  Edit3,
+  Shirt,
+  Droplet,
+  Zap,
+  Compass,
+  Package,
   ExternalLink,
-  CheckCircle
+  CheckCircle,
+  Plus,
+  Trash2,
+  RotateCcw,
+  RefreshCw,
+  CloudRain,
+  Thermometer,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import type {
+  PackingListItemResponse,
+  PackingListResponse,
+  TripResponse,
+} from '@/@types/api';
+import { tripsService } from '@/services/tripsService';
+import { packingService } from '@/services/packingService';
+import { ApiError } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
-type Category = 'Roupas' | 'Higiene' | 'Itens gerais';
-
-interface PackingItem {
-  id: string;
-  name: string;
-  category: Category;
-  checked: boolean;
+function getCategoryStyle(category: string) {
+  const lower = category.toLowerCase();
+  if (lower.includes('roupa') || lower.includes('calçado')) {
+    return { icon: Shirt, color: 'text-beleza', bg: 'bg-beleza-light' };
+  }
+  if (lower.includes('higiene') || lower.includes('saúde')) {
+    return { icon: Droplet, color: 'text-clima', bg: 'bg-clima-light' };
+  }
+  if (lower.includes('eletrônico') || lower.includes('conexão')) {
+    return { icon: Zap, color: 'text-sol-dark', bg: 'bg-sol-light' };
+  }
+  if (lower.includes('atividade')) {
+    return { icon: Compass, color: 'text-teal', bg: 'bg-teal-light' };
+  }
+  return { icon: Package, color: 'text-petroleo', bg: 'bg-petroleo-light' };
 }
-
-// Os mesmos itens mockados da TripsList para fallback
-const DEFAULT_TRIPS = [
-  { id: '1', destination: 'Buenos Aires', country: 'Argentina', startDate: new Date().toISOString(), endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() },
-  { id: '2', destination: 'Alagoinha', country: 'Brasil', startDate: new Date().toISOString(), endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() },
-];
-
-const INITIAL_ITEMS: PackingItem[] = [
-  { id: '1', name: 'Camisetas leves x4', category: 'Roupas', checked: false },
-  { id: '2', name: 'Calças x2', category: 'Roupas', checked: false },
-  { id: '3', name: 'Suéter fino x2', category: 'Roupas', checked: true },
-  { id: '4', name: 'Casaco impermeável x1', category: 'Roupas', checked: false },
-  { id: '5', name: 'Roupa social x1', category: 'Roupas', checked: true },
-  { id: '6', name: 'Tênis confortável', category: 'Roupas', checked: true },
-  { id: '7', name: 'Protetor solar FPS 30', category: 'Higiene', checked: false },
-  { id: '8', name: 'Shampoo e condicionador', category: 'Higiene', checked: false },
-  { id: '9', name: 'Escova e pasta de dente', category: 'Higiene', checked: true },
-  { id: '10', name: 'Desodorante', category: 'Higiene', checked: true },
-  { id: '11', name: 'Passaporte e documentos oficiais', category: 'Itens gerais', checked: false },
-  { id: '12', name: 'Guarda-chuva compacto', category: 'Itens gerais', checked: false },
-  { id: '13', name: 'Notebook e carregador', category: 'Itens gerais', checked: true },
-  { id: '14', name: 'Adaptador de tomada', category: 'Itens gerais', checked: true },
-];
-
-const CATEGORY_CONFIG = {
-  'Roupas': { icon: Shirt, color: 'text-orange-500' },
-  'Higiene': { icon: Droplet, color: 'text-blue-600' },
-  'Itens gerais': { icon: Star, color: 'text-red-500' },
-};
 
 export function PackingList() {
   const navigate = useNavigate();
-  const { id } = useParams();
-  
-  const [trip, setTrip] = useState<any>(null);
-  const [items, setItems] = useState<PackingItem[]>(INITIAL_ITEMS);
-  const [activeFilter, setActiveFilter] = useState<Category | 'Todos'>('Todos');
+  const { id: tripId } = useParams<{ id: string }>();
+
+  const [trip, setTrip] = useState<TripResponse | null>(null);
+  const [packingList, setPackingList] = useState<PackingListResponse | null>(null);
+  const [items, setItems] = useState<PackingListItemResponse[]>([]);
+  const [activeFilter, setActiveFilter] = useState<string>('Todos');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  // Estado para novo item customizado
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customCategory, setCustomCategory] = useState('Outros');
+  const [customQty, setCustomQty] = useState(1);
+  const [isAddingItem, setIsAddingItem] = useState(false);
 
   useEffect(() => {
-    // 1. Primeiro tenta buscar do localStorage
-    const storedTrips = localStorage.getItem('packed_trips');
-    let foundTrip = null;
+    if (!tripId) return;
+    let active = true;
 
-    if (storedTrips) {
-      const trips = JSON.parse(storedTrips);
-      // Garantimos que a comparação é em string
-      foundTrip = trips.find((t: any) => String(t.id) === String(id));
-    }
+    const fetchAll = async () => {
+      try {
+        const tripData = await tripsService.getTrip(tripId);
+        if (!active) return;
+        setTrip(tripData);
 
-    // 2. Se não achou no localStorage, tenta buscar nos itens padrão (para os IDs '1' e '2')
-    if (!foundTrip) {
-      foundTrip = DEFAULT_TRIPS.find(t => String(t.id) === String(id));
-    }
+        let listData: PackingListResponse;
+        try {
+          listData = await packingService.getPackingList(tripId);
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 404) {
+            listData = await packingService.generatePackingList(tripId);
+          } else {
+            throw err;
+          }
+        }
+        if (!active) return;
+        setPackingList(listData);
+        setItems(listData.items);
+      } catch (error) {
+        if (!active) return;
+        if (error instanceof ApiError) {
+          toast.error('Erro ao abrir mala', { description: error.message });
+        } else {
+          toast.error('Não foi possível carregar sua lista de bagagem.');
+        }
+        navigate('/viagens', { replace: true });
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
 
-    // 3. Define a viagem ou redireciona
-    if (foundTrip) {
-      setTrip(foundTrip);
-    } else {
-      toast.error('Viagem não encontrada');
-      navigate('/viagens');
-    }
-  }, [id, navigate]);
+    void fetchAll();
+    return () => {
+      active = false;
+    };
+  }, [tripId, navigate]);
 
-  const formatDate = (isoString: string) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
+  const formatDate = (isoDate: string) => {
+    if (!isoDate) return '';
+    const date = new Date(`${isoDate}T12:00:00`);
     return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(date);
   };
 
   const totalItems = items.length;
-  const completedItems = items.filter(item => item.checked).length;
+  const completedItems = items.filter((item) => item.is_checked).length;
   const pendingItems = totalItems - completedItems;
-  const progressPercentage = totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100);
+  const progressPercentage =
+    totalItems === 0 ? 0 : Math.round((completedItems / totalItems) * 100);
 
-  const toggleItem = (itemId: string) => {
-    setItems(currentItems => 
-      currentItems.map(item => 
-        item.id === itemId ? { ...item, checked: !item.checked } : item
-      )
+  const toggleItem = async (item: PackingListItemResponse) => {
+    if (!tripId) return;
+    const nextChecked = !item.is_checked;
+
+    setItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, is_checked: nextChecked } : it))
     );
+
+    try {
+      await packingService.updateItem(tripId, item.id, { is_checked: nextChecked });
+    } catch {
+      setItems((prev) =>
+        prev.map((it) => (it.id === item.id ? { ...it, is_checked: item.is_checked } : it))
+      );
+      toast.error('Não foi possível salvar a alteração do item.');
+    }
   };
 
-  const handleSave = () => {
-    toast.success('Progresso salvo com sucesso!', {
-      description: `Sua mala para ${trip?.destination} foi atualizada.`,
-    });
+  const handleDeleteItem = async (itemId: string, itemName: string) => {
+    if (!tripId) return;
+    const backup = items;
+    setItems((prev) => prev.filter((it) => it.id !== itemId));
+
+    try {
+      await packingService.deleteItem(tripId, itemId);
+      toast.success(`"${itemName}" removido da lista.`);
+    } catch {
+      setItems(backup);
+      toast.error('Não foi possível remover o item.');
+    }
   };
 
-  const groupedItems = items.reduce((acc, item) => {
+  const handleAddCustomItem = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!tripId || !customName.trim()) return;
+
+    setIsAddingItem(true);
+    try {
+      const created = await packingService.addCustomItem(tripId, {
+        name: customName.trim(),
+        category: customCategory.trim() || 'Outros',
+        quantity: Math.max(1, customQty),
+      });
+      setItems((prev) => [...prev, created]);
+      setCustomName('');
+      setCustomQty(1);
+      setShowAddForm(false);
+      toast.success('Item personalizado adicionado!');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        toast.error(error.message);
+      } else {
+        toast.error('Erro ao adicionar item.');
+      }
+    } finally {
+      setIsAddingItem(false);
+    }
+  };
+
+  const handleResetChecklist = async () => {
+    if (!tripId) return;
+    try {
+      const updated = await packingService.resetChecklist(tripId);
+      setPackingList(updated);
+      setItems(updated.items);
+      toast.success('Todos os itens foram desmarcados.');
+    } catch {
+      toast.error('Não foi possível desmarcar os itens.');
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!tripId) return;
+    setIsRegenerating(true);
+    try {
+      const regenerated = await packingService.regeneratePackingList(tripId);
+      setPackingList(regenerated);
+      setItems(regenerated.items);
+      setTrip((prev) => (prev ? { ...prev, list_outdated: false } : prev));
+      toast.success('Mala reconciliada com sucesso!', {
+        description: 'Itens marcados e personalizados foram mantidos.',
+      });
+    } catch {
+      toast.error('Não foi possível atualizar a mala.');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  const categoriesList = Array.from(new Set(items.map((i) => i.category)));
+
+  const groupedItems = items.reduce<Record<string, PackingListItemResponse[]>>((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
-  }, {} as Record<Category, PackingItem[]>);
+  }, {});
 
-  const displayCategories = activeFilter === 'Todos' 
-    ? (Object.keys(groupedItems) as Category[]) 
-    : [activeFilter];
+  const displayCategories =
+    activeFilter === 'Todos' ? categoriesList : categoriesList.filter((c) => c === activeFilter);
 
-  if (!trip) {
-    return <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">Carregando...</div>;
+  if (isLoading || !trip) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-petroleo font-bold">
+        Preparando sua mala...
+      </div>
+    );
   }
 
+  const weather = packingList?.weather_snapshot;
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans select-none">
-      <header className="flex items-center justify-between px-6 pt-10 pb-4 bg-white/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="p-1 -ml-1 text-slate-700 hover:text-slate-900 transition-colors">
+    <div className="w-full max-w-2xl mx-auto pb-12 font-sans select-none">
+      {/* Header Fixo */}
+      <header className="flex items-center justify-between px-5 pt-6 pb-4 bg-petroleo-light/90 backdrop-blur-md sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/viagens')}
+            className="p-1.5 -ml-1 text-petroleo hover:bg-white rounded-xl transition-colors cursor-pointer"
+          >
             <ChevronLeft className="w-6 h-6" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-tight">Mala para {trip.destination}</h1>
-            <p className="text-xs font-medium text-slate-500 mt-0.5 capitalize">
-              {trip.startDate && trip.endDate 
-                ? `${formatDate(trip.startDate)} - ${formatDate(trip.endDate)}`
-                : 'Datas não definidas'}
+            <h1 className="text-xl font-extrabold text-petroleo leading-tight">
+              Mala para {trip.destination.city}
+            </h1>
+            <p className="text-xs font-semibold text-slate-500 mt-0.5">
+              {formatDate(trip.start_date)} — {formatDate(trip.end_date)} · {trip.duration_days}{' '}
+              {trip.duration_days === 1 ? 'dia' : 'dias'}
             </p>
           </div>
         </div>
-        <button className="p-2 text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+
+        <button
+          type="button"
+          title="Editar parâmetros da viagem"
+          onClick={() => navigate(`/viagens/${trip.id}/editar`)}
+          className="p-2.5 bg-white text-petroleo hover:bg-teal hover:text-white rounded-xl shadow-xs transition-colors cursor-pointer"
+        >
           <Edit3 className="w-5 h-5" />
         </button>
       </header>
 
-      <main className="px-5 flex flex-col gap-6 mt-2 max-w-md mx-auto">
-        <div className="bg-[#0A2E3F] rounded-[1.25rem] p-5 shadow-lg relative overflow-hidden text-white">
-          <div className="flex justify-between items-end mb-4">
-            <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-extrabold tracking-tight">{completedItems}</span>
-              <span className="text-sm font-medium text-slate-300">/{totalItems}</span>
+      <div className="px-5 flex flex-col gap-5 mt-2">
+        {/* Banner de Reconciliação Inteligente (RN-07) */}
+        {trip.list_outdated && (
+          <div className="bg-sol-light border border-sol/40 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-sol-dark shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-extrabold text-sol-dark uppercase tracking-wide">
+                  Parâmetros da viagem alterados
+                </p>
+                <p className="text-xs text-petroleo font-medium mt-0.5">
+                  Atualize a mala mantendo seus itens já marcados e personalizados.
+                </p>
+              </div>
             </div>
-            <span className="text-sm font-medium text-slate-300">{pendingItems} pendentes</span>
+            <Button
+              type="button"
+              onClick={handleRegenerate}
+              disabled={isRegenerating}
+              className="bg-petroleo hover:bg-petroleo/90 text-white rounded-xl h-9 px-4 text-xs font-bold shrink-0 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+              {isRegenerating ? 'Atualizando...' : 'Reconciliar mala'}
+            </Button>
           </div>
-          
-          <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden mb-5">
-            <div 
-              className="h-full bg-amber-400 rounded-full transition-all duration-500 ease-out"
+        )}
+
+        {/* Card de Progresso & Clima */}
+        <div className="bg-petroleo rounded-3xl p-6 shadow-lg text-white flex flex-col gap-4">
+          <div className="flex justify-between items-end">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-4xl font-extrabold tracking-tight">{completedItems}</span>
+              <span className="text-sm font-semibold text-petroleo-soft">
+                / {totalItems} separados
+              </span>
+            </div>
+            <span className="text-xs font-bold bg-white/10 px-3 py-1 rounded-full text-sol">
+              {pendingItems === 0 && totalItems > 0
+                ? 'Mala pronta!'
+                : `${pendingItems} pendentes`}
+            </span>
+          </div>
+
+          <div className="h-2.5 w-full bg-white/15 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-sol rounded-full transition-all duration-500 ease-out"
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
 
-          <div className="flex items-center justify-between text-xs font-medium text-slate-300 pt-4 border-t border-white/10">
-            <span>Consultando clima...</span>
-            <Info className="w-4 h-4" />
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-petroleo-soft pt-3 border-t border-white/10">
+            <div className="flex items-center gap-3">
+              {weather?.temp_min_c !== undefined && weather?.temp_max_c !== undefined ? (
+                <span className="inline-flex items-center gap-1 text-white">
+                  <Thermometer className="w-4 h-4 text-sol" />
+                  {Math.round(weather.temp_min_c)}°C a {Math.round(weather.temp_max_c)}°C
+                </span>
+              ) : (
+                <span>Clima dimensionado</span>
+              )}
+              {weather?.rain_probability_pct !== undefined && (
+                <span className="inline-flex items-center gap-1 text-teal-soft">
+                  <CloudRain className="w-4 h-4" />
+                  {weather.rain_probability_pct}% chuva
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate(`/mala/${trip.id}/insights`)}
+              className="inline-flex items-center gap-1 text-sol hover:underline font-bold cursor-pointer"
+            >
+              Ver alertas e fatores
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
-          <Badge 
-            variant={activeFilter === 'Todos' ? 'default' : 'outline'}
-            onClick={() => setActiveFilter('Todos')}
-            className={`cursor-pointer px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
-              activeFilter === 'Todos' 
-                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-transparent shadow-none' 
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-transparent'
-            }`}
-          >
-            Todos
-          </Badge>
-          {(Object.keys(CATEGORY_CONFIG) as Category[]).map(cat => (
-            <Badge 
-              key={cat}
-              variant={activeFilter === cat ? 'default' : 'outline'}
-              onClick={() => setActiveFilter(cat)}
-              className={`cursor-pointer px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
-                activeFilter === cat 
-                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-transparent shadow-none' 
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-transparent'
+        {/* Barra de Filtros de Categoria + Botão Novo Item */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            <Badge
+              variant={activeFilter === 'Todos' ? 'default' : 'outline'}
+              onClick={() => setActiveFilter('Todos')}
+              className={`cursor-pointer px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                activeFilter === 'Todos'
+                  ? 'bg-petroleo text-white border-transparent shadow-none'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border-slate-200'
               }`}
             >
-              {cat}
+              Todos ({totalItems})
             </Badge>
-          ))}
+            {categoriesList.map((cat) => (
+              <Badge
+                key={cat}
+                variant={activeFilter === cat ? 'default' : 'outline'}
+                onClick={() => setActiveFilter(cat)}
+                className={`cursor-pointer px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                  activeFilter === cat
+                    ? 'bg-petroleo text-white border-transparent shadow-none'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border-slate-200'
+                }`}
+              >
+                {cat}
+              </Badge>
+            ))}
+          </div>
+
+          <Button
+            type="button"
+            variant="teal"
+            onClick={() => setShowAddForm((prev) => !prev)}
+            className="h-9 px-3.5 rounded-full text-xs font-bold shrink-0 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Item
+          </Button>
         </div>
 
-        <div className="flex flex-col gap-5">
-          {displayCategories.map(category => {
+        {/* Formulário Inline para Adicionar Item Personalizado */}
+        {showAddForm && (
+          <form
+            onSubmit={handleAddCustomItem}
+            className="bg-white rounded-3xl p-5 shadow-sm border border-teal/30 flex flex-col gap-3"
+          >
+            <p className="text-sm font-extrabold text-petroleo">Adicionar item personalizado</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <Input
+                type="text"
+                placeholder="Nome do item (ex: Câmera)"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                required
+                className="sm:col-span-2 h-11 rounded-xl bg-petroleo-light border-none text-sm"
+              />
+              <Input
+                type="number"
+                min={1}
+                max={99}
+                value={customQty}
+                onChange={(e) => setCustomQty(Number(e.target.value) || 1)}
+                className="h-11 rounded-xl bg-petroleo-light border-none text-sm"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Input
+                type="text"
+                placeholder="Categoria (ex: Eletrônicos, Roupas, Outros)"
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                className="h-10 rounded-xl bg-petroleo-light border-none text-xs"
+              />
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowAddForm(false)}
+                  className="h-10 rounded-xl text-xs font-bold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  variant="teal"
+                  disabled={isAddingItem}
+                  className="h-10 rounded-xl text-xs font-bold px-4 cursor-pointer"
+                >
+                  {isAddingItem ? 'Salvando...' : 'Adicionar'}
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Grupos de Itens por Categoria */}
+        <div className="flex flex-col gap-4">
+          {displayCategories.map((category) => {
             const categoryItems = groupedItems[category] || [];
             if (categoryItems.length === 0) return null;
 
-            const CatIcon = CATEGORY_CONFIG[category].icon;
-            const catColor = CATEGORY_CONFIG[category].color;
-            const completedInCategory = categoryItems.filter(i => i.checked).length;
+            const style = getCategoryStyle(category);
+            const CatIcon = style.icon;
+            const completedInCat = categoryItems.filter((i) => i.is_checked).length;
 
             return (
-              <div key={category} className="bg-white rounded-[1.25rem] p-5 shadow-sm border border-slate-100">
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-50">
-                  <div className={`flex items-center gap-2 font-bold text-lg ${catColor}`}>
-                    <CatIcon className="w-5 h-5 stroke-[2.5]" />
-                    {category}
+              <div
+                key={category}
+                className="bg-white rounded-3xl p-5 shadow-xs border border-slate-100"
+              >
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-xl ${style.bg} ${style.color} flex items-center justify-center`}
+                    >
+                      <CatIcon className="w-4 h-4 stroke-[2.5]" />
+                    </div>
+                    <h2 className="font-extrabold text-base text-petroleo">{category}</h2>
                   </div>
-                  <span className="text-xs font-semibold text-slate-500">
-                    {completedInCategory} de {categoryItems.length}
+                  <span className="text-xs font-bold text-slate-400">
+                    {completedInCat} de {categoryItems.length}
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-4">
-                  {categoryItems.map(item => (
-                    <div 
-                      key={item.id} 
-                      onClick={() => toggleItem(item.id)}
-                      className="flex items-center gap-3 cursor-pointer group"
+                <div className="flex flex-col gap-3.5">
+                  {categoryItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-3 group py-1"
                     >
-                      {item.checked ? (
-                        <CheckCircle className="w-5 h-5 text-[#5F8D4E] shrink-0 transition-transform group-hover:scale-110" />
-                      ) : (
-                        <div className="w-5 h-5 rounded-md border-2 border-slate-200 shrink-0 transition-colors group-hover:border-slate-300" />
-                      )}
-                      
-                      <span className={`text-sm font-medium transition-all ${
-                        item.checked 
-                          ? 'text-[#5F8D4E] line-through decoration-[#5F8D4E]/50' 
-                          : 'text-slate-700'
-                      }`}>
-                        {item.name}
-                      </span>
+                      <div
+                        onClick={() => toggleItem(item)}
+                        className="flex items-start gap-3 cursor-pointer flex-1"
+                      >
+                        {item.is_checked ? (
+                          <CheckCircle className="w-5 h-5 text-sucesso shrink-0 mt-0.5 transition-transform group-hover:scale-110" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-md border-2 border-slate-300 shrink-0 mt-0.5 transition-colors group-hover:border-teal" />
+                        )}
+
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`text-sm font-bold transition-all ${
+                                item.is_checked
+                                  ? 'text-sucesso line-through decoration-sucesso/60'
+                                  : 'text-petroleo'
+                              }`}
+                            >
+                              {item.name}
+                            </span>
+                            <Badge className="bg-petroleo-light text-petroleo border-none text-[11px] font-extrabold px-2 py-0.5 rounded-md">
+                              x{item.quantity}
+                            </Badge>
+                            {item.source === 'CUSTOM' && (
+                              <Badge className="bg-teal-light text-teal-dark border-none text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                Personalizado
+                              </Badge>
+                            )}
+                          </div>
+                          {item.reason && (
+                            <p className="text-xs text-slate-400 font-medium mt-0.5 leading-snug">
+                              {item.reason}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        title="Remover item da mala"
+                        onClick={() => handleDeleteItem(item.id, item.name)}
+                        className="p-1.5 text-slate-300 hover:text-erro rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -245,22 +527,30 @@ export function PackingList() {
           })}
         </div>
 
-        <div className="flex items-center gap-3 pt-4">
-          <Button 
-            variant="outline" 
-            className="flex-1 bg-transparent border-[#0D9488] text-[#0D9488] hover:bg-[#0D9488]/5 h-12 rounded-full font-bold shadow-none"
-            onClick={() => navigate(`/mala/${id}/insights`)}
+        {/* Ações de Rodapé */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:flex-1 bg-white border-teal text-teal hover:bg-teal hover:text-white h-12 rounded-2xl font-bold shadow-xs cursor-pointer"
+            onClick={() => navigate(`/mala/${trip.id}/insights`)}
           >
             Por que essa lista? <ExternalLink className="w-4 h-4 ml-1.5" />
           </Button>
-          <Button 
-            className="px-8 bg-[#5F8D4E] hover:bg-[#4a703d] text-white h-12 rounded-full font-bold shadow-md"
-            onClick={handleSave}
-          >
-            Salvar
-          </Button>
+
+          {completedItems > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleResetChecklist}
+              className="w-full sm:w-auto px-6 bg-white border-slate-200 text-slate-600 hover:bg-slate-100 h-12 rounded-2xl font-bold cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4 mr-1.5" />
+              Desmarcar tudo
+            </Button>
+          )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
